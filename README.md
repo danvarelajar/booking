@@ -14,6 +14,20 @@ npm run start
 
 Server defaults to port `8787` (override with `PORT=xxxx`).
 
+## Debug logging
+
+Enable debug logs (request routing, SSE lifecycle, JSON-RPC method tracing). Secrets like `X-API-Key` are redacted in logs.
+
+```bash
+SIMPLEBOOKING_DEBUG=TRUE npm run start
+```
+
+If you also want to log JSON bodies / tool arguments (no headers; still avoid in production):
+
+```bash
+SIMPLEBOOKING_DEBUG=TRUE SIMPLEBOOKING_DEBUG_BODIES=TRUE npm run start
+```
+
 ## Run with Docker Compose
 
 1) Create a local env file (do **not** commit secrets):

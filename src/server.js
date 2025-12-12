@@ -12,6 +12,18 @@ import { analyzeUntrustedText, simulateNaiveAgentDecision } from "./lab.js";
 const PORT = Number(process.env.PORT || 8787);
 const MCP_API_KEY = process.env.MCP_API_KEY || ""; // if set, require X-API-Key on MCP endpoints
 
+function parseBoolEnv(name, defaultValue = false) {
+  const raw = process.env[name];
+  if (raw === undefined) return defaultValue;
+  const v = String(raw).trim().toLowerCase();
+  if (["true", "1", "yes", "y", "on"].includes(v)) return true;
+  if (["false", "0", "no", "n", "off"].includes(v)) return false;
+  return defaultValue;
+}
+
+const DEBUG = parseBoolEnv("SIMPLEBOOKING_DEBUG", false) || parseBoolEnv("DEBUG", false);
+const DEBUG_LOG_BODIES = parseBoolEnv("SIMPLEBOOKING_DEBUG_BODIES", false);
+
 function makeRequestId() {
   // non-crypto request id for correlation (ok for a mock server)
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -48,11 +60,30 @@ function unauthorized(res) {
   json(res, 401, { error: "unauthorized" });
 }
 
+function debugLog(obj) {
+  if (!DEBUG) return;
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify({ time: nowIso(), level: "debug", ...obj }));
+}
+
 function getHeader(req, name) {
   const key = name.toLowerCase();
   const v = req.headers[key];
   if (Array.isArray(v)) return v[0];
   return v;
+}
+
+function redactHeaders(headers) {
+  const out = {};
+  for (const [k, v] of Object.entries(headers || {})) {
+    const key = String(k).toLowerCase();
+    if (key === "x-api-key" || key === "authorization" || key === "cookie" || key === "set-cookie") {
+      out[k] = "[redacted]";
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
 }
 
 function timingSafeEquals(a, b) {
@@ -378,6 +409,7 @@ async function readJsonBody(req, { maxBytes = 256 * 1024 } = {}) {
   }
   const raw = Buffer.concat(chunks).toString("utf8");
   if (!raw) return null;
+  debugLog({ event: "http_body_read", bytes: Buffer.byteLength(raw) });
   return JSON.parse(raw);
 }
 
@@ -385,6 +417,14 @@ function processJsonRpc(body, { requestId } = {}) {
   const { jsonrpc, id, method, params } = body || {};
   if (jsonrpc !== "2.0") return mcpJsonRpcError(id, -32600, "Invalid Request", { reason: "jsonrpc must be 2.0" });
   if (typeof method !== "string") return mcpJsonRpcError(id, -32600, "Invalid Request", { reason: "method must be a string" });
+
+  debugLog({
+    event: "jsonrpc_in",
+    requestId,
+    id,
+    method,
+    paramsKeys: params && typeof params === "object" ? Object.keys(params) : null
+  });
 
   // MCP-ish method set
   if (method === "initialize") {
@@ -423,6 +463,7 @@ function processJsonRpc(body, { requestId } = {}) {
 
     // eslint-disable-next-line no-console
     console.log(JSON.stringify({ time: nowIso(), requestId, event: "tool_call", tool: name }));
+    if (DEBUG_LOG_BODIES) debugLog({ event: "tool_call_args", requestId, tool: name, arguments: args });
 
     const result = handleToolCall(name, args);
     return mcpJsonRpcSuccess(id, {
@@ -443,6 +484,15 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
     res.setHeader("x-request-id", requestId);
 
+    debugLog({
+      event: "http_request",
+      requestId,
+      method: req.method,
+      path: url.pathname,
+      query: url.searchParams.toString() || null,
+      headers: redactHeaders(req.headers)
+    });
+
     if (req.method === "GET" && url.pathname === "/health") {
       return json(res, 200, { ok: true, time: nowIso() });
     }
@@ -453,6 +503,7 @@ const server = http.createServer(async (req, res) => {
     // - subsequent "message" events containing JSON-RPC responses
     if (req.method === "GET" && url.pathname === "/sse") {
       if (!requireApiKey(req)) {
+        debugLog({ event: "auth_failed", requestId, path: "/sse" });
         res.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
         res.end("unauthorized");
         return;
@@ -465,6 +516,7 @@ const server = http.createServer(async (req, res) => {
       });
 
       SSE_SESSIONS.set(sessionId, res);
+      debugLog({ event: "sse_connected", requestId, sessionId, sessions: SSE_SESSIONS.size });
 
       // Advertise the POST endpoint for client->server messages.
       // Emit an absolute URL for maximum client compatibility.
@@ -484,6 +536,7 @@ const server = http.createServer(async (req, res) => {
       req.on("close", () => {
         clearInterval(keepAlive);
         SSE_SESSIONS.delete(sessionId);
+        debugLog({ event: "sse_disconnected", requestId, sessionId, sessions: SSE_SESSIONS.size });
       });
 
       return; // keep connection open
@@ -502,9 +555,13 @@ const server = http.createServer(async (req, res) => {
 
       const body = await readJsonBody(req);
       if (!body) return badRequest(res, "missing JSON body");
+      if (DEBUG_LOG_BODIES) debugLog({ event: "messages_body", requestId, sessionId, body });
 
       const responseMsg = processJsonRpc(body, { requestId });
-      if (responseMsg) writeSse(sseRes, "message", responseMsg);
+      if (responseMsg) {
+        writeSse(sseRes, "message", responseMsg);
+        debugLog({ event: "sse_message_sent", requestId, sessionId, jsonrpcId: responseMsg.id ?? null });
+      }
 
       // Acknowledge receipt; the actual JSON-RPC response is delivered over SSE.
       return json(res, 200, { ok: true, requestId });
@@ -521,6 +578,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readJsonBody(req);
       const untrustedText = body?.untrustedText;
       if (typeof untrustedText !== "string") return badRequest(res, "untrustedText must be a string");
+      if (DEBUG_LOG_BODIES) debugLog({ event: "lab_analyze", requestId, bytes: Buffer.byteLength(untrustedText) });
       return json(res, 200, { requestId, ...analyzeUntrustedText(untrustedText) });
     }
 
@@ -531,6 +589,7 @@ const server = http.createServer(async (req, res) => {
 
       const body = await readJsonBody(req);
       if (!body) return badRequest(res, "missing JSON body");
+      if (DEBUG_LOG_BODIES) debugLog({ event: "mcp_body", requestId, body });
 
       const responseMsg = processJsonRpc(body, { requestId });
       // Notifications return null.
@@ -540,7 +599,17 @@ const server = http.createServer(async (req, res) => {
 
     json(res, 404, { error: "not found" });
   } catch (err) {
-    json(res, 500, { error: "internal error", message: err?.message || String(err) });
+    debugLog({
+      event: "unhandled_error",
+      requestId,
+      message: err?.message || String(err),
+      stack: DEBUG ? err?.stack : undefined
+    });
+    json(res, 500, {
+      error: "internal error",
+      message: err?.message || String(err),
+      ...(DEBUG ? { stack: err?.stack } : {})
+    });
   }
 });
 
