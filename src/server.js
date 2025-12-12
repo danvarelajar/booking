@@ -10,7 +10,7 @@ import { analyzeUntrustedText, simulateNaiveAgentDecision } from "./lab.js";
  */
 
 const PORT = Number(process.env.PORT || 8787);
-const MCP_API_KEY = process.env.MCP_API_KEY || ""; // if set, require X-API-Key on MCP endpoints
+const MCP_API_KEY_RAW = process.env.MCP_API_KEY || ""; // if set, require X-API-Key on MCP endpoints
 
 function parseBoolEnv(name, defaultValue = false) {
   const raw = process.env[name];
@@ -93,11 +93,28 @@ function timingSafeEquals(a, b) {
   return crypto.timingSafeEqual(ab, bb);
 }
 
+function normalizeApiKey(v) {
+  // Common source of mismatch: surrounding quotes or incidental whitespace from env files / UI.
+  let s = String(v ?? "").trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"') && s.length >= 2) ||
+    (s.startsWith("'") && s.endsWith("'") && s.length >= 2)
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+}
+
 function requireApiKey(req) {
-  if (!MCP_API_KEY) return true; // dev-friendly: if not configured, allow
-  const provided = getHeader(req, "x-api-key") || getHeader(req, "x-api_key") || getHeader(req, "x-api-key".toUpperCase());
+  const expected = normalizeApiKey(MCP_API_KEY_RAW);
+  if (!expected) return true; // dev-friendly: if not configured, allow
+  const providedRaw =
+    getHeader(req, "x-api-key") || getHeader(req, "x-api_key") || getHeader(req, "x-api-key".toUpperCase());
+  const provided = normalizeApiKey(providedRaw);
   if (!provided) return false;
-  return timingSafeEquals(provided, MCP_API_KEY);
+  const ok = timingSafeEquals(provided, expected);
+  debugLog({ event: "auth_check", expectedLen: expected.length, providedLen: provided.length, ok });
+  return ok;
 }
 
 function nowIso() {

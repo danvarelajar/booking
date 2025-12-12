@@ -201,6 +201,12 @@ Start the server with an API key:
 MCP_API_KEY='<your key>' npm run start
 ```
 
+Note: if you set `MCP_API_KEY` via Docker Compose `.env`, prefer **no quotes** to avoid accidental mismatches:
+
+```bash
+MCP_API_KEY=your_key_here
+```
+
 ## City → Airport mapping
 
 Flight tools accept **either**:
