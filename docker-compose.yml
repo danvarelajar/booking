@@ -8,6 +8,9 @@ services:
       # Put this in a local .env file (not committed) or export in your shell.
       MCP_API_KEY: "${MCP_API_KEY}"
       PORT: "8787"
+      # Debug flags (optional). Set in .env as TRUE/FALSE.
+      SIMPLEBOOKING_DEBUG: "${SIMPLEBOOKING_DEBUG:-FALSE}"
+      SIMPLEBOOKING_DEBUG_BODIES: "${SIMPLEBOOKING_DEBUG_BODIES:-FALSE}"
     ports:
       - "8787:8787"
 
