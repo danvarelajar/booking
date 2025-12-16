@@ -138,6 +138,47 @@ function parseIsoDate(name, s) {
   return d;
 }
 
+function todayUtcMidnight() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+}
+
+function assertNotPastDate(name, s) {
+  const d = parseIsoDate(name, s);
+  const today = todayUtcMidnight();
+  if (d.getTime() < today.getTime()) throw new Error(`${name} must not be in the past`);
+  return d;
+}
+
+function makeElicitationForm({ title, message, fields }) {
+  const schema = {
+    title: title || "Additional information required",
+    requestedSchema: {
+      type: "object",
+      properties: Object.fromEntries(
+        (fields || []).map((f) => [
+          f.name,
+          {
+            type: f.name === "passengers" || f.name === "rooms" ? "integer" : "string",
+            description: f.hint || "Provide a value"
+          }
+        ])
+      ),
+      required: (fields || []).filter((f) => f.required).map((f) => f.name)
+    }
+  };
+
+  return {
+    content: [
+      { type: "text", text: message || "More information is required." },
+      // Jarvis compatibility: keep this as plain text. Many MCP clients only reliably render `type: "text"`.
+      // We still include a machine-readable schema blob so an agent/client can present a form if it chooses.
+      { type: "text", text: `Elicitation (schema):\n${JSON.stringify(schema, null, 2)}` }
+    ],
+    isError: false
+  };
+}
+
 function daysBetween(startDate, endDate) {
   const ms = endDate.getTime() - startDate.getTime();
   return Math.ceil(ms / (24 * 60 * 60 * 1000));
@@ -370,6 +411,54 @@ function handleToolCall(name, args) {
   if (name === "search_flights") return makeFlightQuote(args);
   if (name === "search_hotels") return makeHotelQuote(args);
   if (name === "create_itinerary") {
+    // Basic elicitation: if required fields are missing, return a structured prompt.
+    const required = [
+      "from",
+      "to",
+      "departDate",
+      "returnDate",
+      "city",
+      "checkInDate",
+      "checkOutDate",
+      "passengers",
+      "rooms"
+    ];
+    const missing = required.filter((k) => args?.[k] === undefined || args?.[k] === null || String(args?.[k]).trim?.() === "");
+    if (missing.length > 0) {
+      return makeElicitationForm({
+        title: "Create itinerary: missing fields",
+        message: `To create an itinerary, I still need: ${missing.join(", ")}.`,
+        fields: missing.map((name) => ({
+          name,
+          required: true,
+          hint:
+            name.endsWith("Date")
+              ? "Use YYYY-MM-DD"
+              : name === "passengers" || name === "rooms"
+                ? "Enter a positive integer"
+                : "Enter a value"
+        }))
+      });
+    }
+
+    // Policy: do not allow creating itineraries in the past.
+    // We key this off the trip start dates (depart + check-in). Dates are treated as UTC (YYYY-MM-DD @ 00:00Z).
+    try {
+      assertNotPastDate("departDate", args.departDate);
+      assertNotPastDate("checkInDate", args.checkInDate);
+    } catch (err) {
+      // Turn policy errors into an elicitation prompt to pick new dates.
+      const msg = err?.message || String(err);
+      return makeElicitationForm({
+        title: "Create itinerary: update dates",
+        message: msg,
+        fields: [
+          { name: "departDate", required: true, hint: "Use YYYY-MM-DD (today or future)" },
+          { name: "checkInDate", required: true, hint: "Use YYYY-MM-DD (today or future)" }
+        ]
+      });
+    }
+
     const flight = makeFlightQuote({
       from: args.from,
       to: args.to,
@@ -398,6 +487,15 @@ function handleToolCall(name, args) {
     });
   }
   throw new Error(`Unknown tool: ${name}`);
+}
+
+function isToolResultShape(v) {
+  return (
+    v &&
+    typeof v === "object" &&
+    Array.isArray(v.content) &&
+    (typeof v.isError === "boolean" || v.isError === undefined)
+  );
 }
 
 function mcpJsonRpcSuccess(id, result) {
@@ -450,6 +548,8 @@ function processJsonRpc(body, { requestId } = {}) {
       serverInfo: { name: "SimpleBooking Mock MCP", version: "0.1.0" },
       capabilities: {
         tools: { listChanged: false },
+        // MCP elicitation capability (Jarvis expects standard-ish shapes; keep it minimal).
+        elicitation: { form: {} },
         prompts: {},
         resources: {}
       }
@@ -482,11 +582,25 @@ function processJsonRpc(body, { requestId } = {}) {
     console.log(JSON.stringify({ time: nowIso(), requestId, event: "tool_call", tool: name }));
     if (DEBUG_LOG_BODIES) debugLog({ event: "tool_call_args", requestId, tool: name, arguments: args });
 
-    const result = handleToolCall(name, args);
-    return mcpJsonRpcSuccess(id, {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      isError: false
-    });
+    try {
+      const result = handleToolCall(name, args);
+      if (isToolResultShape(result)) {
+        return mcpJsonRpcSuccess(id, {
+          content: result.content,
+          isError: Boolean(result.isError)
+        });
+      }
+      return mcpJsonRpcSuccess(id, {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        isError: false
+      });
+    } catch (err) {
+      const message = err?.message || String(err);
+      return mcpJsonRpcSuccess(id, {
+        content: [{ type: "text", text: message }],
+        isError: true
+      });
+    }
   }
 
   return mcpJsonRpcError(id, -32601, "Method not found");
