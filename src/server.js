@@ -21,7 +21,8 @@ function parseBoolEnv(name, defaultValue = false) {
   return defaultValue;
 }
 
-const DEBUG = parseBoolEnv("SIMPLEBOOKING_DEBUG", false) || parseBoolEnv("DEBUG", false);
+// Default to DEBUG enabled for lab visibility; disable with SIMPLEBOOKING_DEBUG=FALSE.
+const DEBUG = parseBoolEnv("SIMPLEBOOKING_DEBUG", true) || parseBoolEnv("DEBUG", false);
 const DEBUG_LOG_BODIES = parseBoolEnv("SIMPLEBOOKING_DEBUG_BODIES", false);
 const DEBUG_LOG_HEADERS = parseBoolEnv("SIMPLEBOOKING_DEBUG_HEADERS", false);
 const LOG_FORMAT = String(process.env.SIMPLEBOOKING_LOG_FORMAT || "pretty").toLowerCase(); // pretty|json

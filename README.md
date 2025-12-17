@@ -16,10 +16,10 @@ Server defaults to port `8787` (override with `PORT=xxxx`).
 
 ## Debug logging
 
-Enable debug logs (request routing, SSE lifecycle, JSON-RPC method tracing). Secrets like `X-API-Key` are redacted in logs.
+Debug logs (request routing, SSE lifecycle, JSON-RPC method tracing) are **enabled by default** for this lab server. Secrets like `X-API-Key` are redacted in logs.
 
 ```bash
-SIMPLEBOOKING_DEBUG=TRUE npm run start
+SIMPLEBOOKING_DEBUG=FALSE npm run start
 ```
 
 ### Log format
