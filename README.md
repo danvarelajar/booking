@@ -22,6 +22,14 @@ Enable debug logs (request routing, SSE lifecycle, JSON-RPC method tracing). Sec
 SIMPLEBOOKING_DEBUG=TRUE npm run start
 ```
 
+### Log format
+
+By default logs are JSON (easy to ingest). To make them easier to read:
+
+```bash
+SIMPLEBOOKING_DEBUG=TRUE SIMPLEBOOKING_LOG_FORMAT=pretty npm run start
+```
+
 If you also want to log JSON bodies / tool arguments (no headers; still avoid in production):
 
 ```bash

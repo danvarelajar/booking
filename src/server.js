@@ -23,6 +23,7 @@ function parseBoolEnv(name, defaultValue = false) {
 
 const DEBUG = parseBoolEnv("SIMPLEBOOKING_DEBUG", false) || parseBoolEnv("DEBUG", false);
 const DEBUG_LOG_BODIES = parseBoolEnv("SIMPLEBOOKING_DEBUG_BODIES", false);
+const LOG_FORMAT = String(process.env.SIMPLEBOOKING_LOG_FORMAT || "json").toLowerCase(); // json|pretty
 
 function makeRequestId() {
   // non-crypto request id for correlation (ok for a mock server)
@@ -60,10 +61,30 @@ function unauthorized(res) {
   json(res, 401, { error: "unauthorized" });
 }
 
+function emitLog(level, obj) {
+  const time = nowIso();
+  if (LOG_FORMAT === "pretty") {
+    const event = obj?.event ? String(obj.event) : "-";
+    const requestId = obj?.requestId ? ` requestId=${obj.requestId}` : "";
+    const parts = [];
+    for (const [k, v] of Object.entries(obj || {})) {
+      if (k === "event" || k === "requestId") continue;
+      if (v === undefined) continue;
+      const rendered =
+        v && typeof v === "object" ? JSON.stringify(v) : String(v);
+      parts.push(`${k}=${rendered}`);
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[${time}] ${level.toUpperCase()} ${event}${requestId}${parts.length ? " " + parts.join(" ") : ""}`);
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify({ time, level, ...(obj || {}) }));
+}
+
 function debugLog(obj) {
   if (!DEBUG) return;
-  // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ time: nowIso(), level: "debug", ...obj }));
+  emitLog("debug", obj);
 }
 
 function getHeader(req, name) {
@@ -607,8 +628,7 @@ function processJsonRpc(body, { requestId } = {}) {
       return mcpJsonRpcError(id, -32602, "Invalid params", { reason: "params.arguments must be an object" });
     }
 
-    // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ time: nowIso(), requestId, event: "tool_call", tool: name }));
+    emitLog("info", { event: "tool_call", requestId, tool: name });
     if (DEBUG_LOG_BODIES) debugLog({ event: "tool_call_args", requestId, tool: name, arguments: args });
 
     try {
