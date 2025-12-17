@@ -249,6 +249,41 @@ function sanitizeText(s) {
   return String(s).replace(/[\u0000-\u001F\u007F]/g, "").trim();
 }
 
+function summarizeToolArgs(toolName, args) {
+  const a = args && typeof args === "object" ? args : {};
+  const pick = (keys) =>
+    Object.fromEntries(
+      keys
+        .filter((k) => a[k] !== undefined)
+        .map((k) => [k, typeof a[k] === "string" ? sanitizeText(a[k]) : a[k]])
+    );
+
+  if (toolName === "search_flights") {
+    return pick(["from", "to", "departDate", "returnDate", "passengers"]);
+  }
+  if (toolName === "search_hotels") {
+    return pick(["city", "checkInDate", "checkOutDate", "rooms"]);
+  }
+  if (toolName === "create_itinerary") {
+    return pick([
+      "from",
+      "to",
+      "departDate",
+      "returnDate",
+      "city",
+      "checkInDate",
+      "checkOutDate",
+      "passengers",
+      "rooms"
+    ]);
+  }
+  if (toolName === "simulate_tool_injection") {
+    const t = typeof a.untrustedText === "string" ? a.untrustedText : "";
+    return { untrustedTextBytes: Buffer.byteLength(t) };
+  }
+  return { argsKeys: Object.keys(a).slice(0, 20) };
+}
+
 const CITY_TO_IATA = new Map(
   Object.entries({
     "san francisco": "SFO",
@@ -647,7 +682,13 @@ function processJsonRpc(body, { requestId } = {}) {
       return mcpJsonRpcError(id, -32602, "Invalid params", { reason: "params.arguments must be an object" });
     }
 
-    emitLog("info", { event: "tool_call", requestId, tool: name });
+    emitLog("info", {
+      event: "tool_call",
+      requestId,
+      jsonrpcId: id ?? null,
+      tool: name,
+      args: summarizeToolArgs(name, args)
+    });
     if (DEBUG_LOG_BODIES) debugLog({ event: "tool_call_args", requestId, tool: name, arguments: args });
 
     try {
