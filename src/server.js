@@ -23,7 +23,7 @@ function parseBoolEnv(name, defaultValue = false) {
 
 const DEBUG = parseBoolEnv("SIMPLEBOOKING_DEBUG", false) || parseBoolEnv("DEBUG", false);
 const DEBUG_LOG_BODIES = parseBoolEnv("SIMPLEBOOKING_DEBUG_BODIES", false);
-const LOG_FORMAT = String(process.env.SIMPLEBOOKING_LOG_FORMAT || "json").toLowerCase(); // json|pretty
+const LOG_FORMAT = String(process.env.SIMPLEBOOKING_LOG_FORMAT || "pretty").toLowerCase(); // pretty|json
 
 function makeRequestId() {
   // non-crypto request id for correlation (ok for a mock server)
