@@ -332,8 +332,8 @@ function normalizeAirportCode(input) {
 function makeFlightQuote({ from, to, departDate, returnDate, passengers }) {
   assertString("from", from);
   assertString("to", to);
-  const dep = parseIsoDate("departDate", departDate);
-  const ret = parseIsoDate("returnDate", returnDate);
+  const dep = assertNotPastDate("departDate", departDate);
+  const ret = assertNotPastDate("returnDate", returnDate);
   assertPositiveInt("passengers", passengers);
   if (ret.getTime() <= dep.getTime()) throw new Error("returnDate must be after departDate");
 
@@ -382,8 +382,8 @@ function makeFlightQuote({ from, to, departDate, returnDate, passengers }) {
 
 function makeHotelQuote({ city, checkInDate, checkOutDate, rooms }) {
   assertString("city", city);
-  const inD = parseIsoDate("checkInDate", checkInDate);
-  const outD = parseIsoDate("checkOutDate", checkOutDate);
+  const inD = assertNotPastDate("checkInDate", checkInDate);
+  const outD = assertNotPastDate("checkOutDate", checkOutDate);
   assertPositiveInt("rooms", rooms);
   if (outD.getTime() <= inD.getTime()) throw new Error("checkOutDate must be after checkInDate");
 
