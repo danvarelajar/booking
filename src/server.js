@@ -313,7 +313,7 @@ function summarizeToolArgs(toolName, args) {
     return pick(["from", "to", "departDate", "returnDate", "passengers"]);
   }
   if (toolName === "search_hotels") {
-    return pick(["city", "checkInDate", "checkOutDate", "rooms", "guests"]);
+    return pick(["city", "checkInDate", "checkOutDate", "rooms"]);
   }
   if (toolName === "create_itinerary") {
     return pick([
@@ -333,6 +333,31 @@ function summarizeToolArgs(toolName, args) {
     return { untrustedTextBytes: Buffer.byteLength(t) };
   }
   return { argsKeys: Object.keys(a).slice(0, 20) };
+}
+
+function getToolSchema(toolName) {
+  const t = TOOLS.find((x) => x.name === toolName);
+  return t?.inputSchema || null;
+}
+
+function validateToolArgumentsOrThrow(toolName, args) {
+  const schema = getToolSchema(toolName);
+  if (!schema) throw new Error(`Unknown tool: ${toolName}`);
+
+  const properties = schema.properties || {};
+  const required = schema.required || [];
+
+  // Required fields
+  for (const k of required) {
+    if (!(k in args)) throw new Error(`Missing required argument: ${k}`);
+    if (args[k] === null || args[k] === "") throw new Error(`Missing required argument: ${k}`);
+  }
+
+  // Unknown fields (when additionalProperties is explicitly false)
+  if (schema.additionalProperties === false) {
+    const unknown = Object.keys(args).filter((k) => !(k in properties));
+    if (unknown.length) throw new Error(`Unknown argument(s): ${unknown.join(", ")}`);
+  }
 }
 
 const CITY_TO_IATA = new Map(
@@ -431,14 +456,11 @@ function makeFlightQuote({ from, to, departDate, returnDate, passengers }) {
   };
 }
 
-function makeHotelQuote({ city, checkInDate, checkOutDate, rooms, guests = 1 }) {
+function makeHotelQuote({ city, checkInDate, checkOutDate, rooms }) {
   assertString("city", city);
   const inD = assertNotPastDate("checkInDate", checkInDate);
   const outD = assertNotPastDate("checkOutDate", checkOutDate);
   assertPositiveInt("rooms", rooms);
-  assertPositiveInt("guests", guests);
-  // simple occupancy rule for the lab: max 4 guests per room
-  if (guests > rooms * 4) throw new Error("guests exceeds max occupancy (4 per room)");
   if (outD.getTime() <= inD.getTime()) throw new Error("checkOutDate must be after checkInDate");
 
   const nights = daysBetween(inD, outD);
@@ -446,14 +468,11 @@ function makeHotelQuote({ city, checkInDate, checkOutDate, rooms, guests = 1 }) 
   if (nights > 30) throw new Error("stay too long for mock system (max 30 nights)");
 
   const hotels = ["Aurora Suites", "Pine Harbor Hotel", "Saffron Meridian Inn", "Juniper Gate Lodge"];
-  const seedBase = `${city}|${checkInDate}|${checkOutDate}|${rooms}|${guests}`;
+  const seedBase = `${city}|${checkInDate}|${checkOutDate}|${rooms}`;
   const seed = stableHash(seedBase);
   const name = hotels[seed % hotels.length];
 
-  const baseNightly = priceFromSeed(seed, { min: 90, max: 480 });
-  const avgGuestsPerRoom = guests / rooms;
-  const surcharge = avgGuestsPerRoom > 1 ? Math.round((avgGuestsPerRoom - 1) * 25) : 0;
-  const nightly = baseNightly + surcharge;
+  const nightly = priceFromSeed(seed, { min: 90, max: 480 });
   const total = nightly * nights * rooms;
 
   return {
@@ -462,7 +481,6 @@ function makeHotelQuote({ city, checkInDate, checkOutDate, rooms, guests = 1 }) 
       name,
       city: sanitizeText(city),
       rooms,
-      guests,
       checkInDate,
       checkOutDate,
       nights,
@@ -500,8 +518,7 @@ const TOOLS = [
         city: { type: "string" },
         checkInDate: { type: "string", description: "YYYY-MM-DD" },
         checkOutDate: { type: "string", description: "YYYY-MM-DD" },
-        rooms: { type: "integer", minimum: 1 },
-        guests: { type: "integer", minimum: 1, description: "Total guests for the booking (optional; default 1). Max 4 per room." }
+        rooms: { type: "integer", minimum: 1 }
       }
     }
   },
@@ -622,8 +639,7 @@ function handleToolCall(name, args) {
       checkInDate: args.checkInDate,
       checkOutDate: args.checkOutDate,
       rooms: args.rooms,
-      // create_itinerary does not accept a separate guests value; assume guests == passengers
-      guests: args.passengers
+      // Guests are not modeled in this mock; pricing uses rooms only.
     });
     return {
       generatedAt: nowIso(),
@@ -757,6 +773,7 @@ function processJsonRpc(body, { requestId } = {}) {
     if (DEBUG_LOG_BODIES) debugLog({ event: "tool_call_args", requestId, tool: name, arguments: args });
 
     try {
+      validateToolArgumentsOrThrow(name, args);
       const result = handleToolCall(name, args);
       if (isToolResultShape(result)) {
         const resp = mcpJsonRpcSuccess(id, {
