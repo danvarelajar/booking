@@ -325,8 +325,7 @@ function summarizeToolArgs(toolName, args) {
       "checkInDate",
       "checkOutDate",
       "passengers",
-      "rooms",
-      "guests"
+      "rooms"
     ]);
   }
   if (toolName === "simulate_tool_injection") {
@@ -522,8 +521,7 @@ const TOOLS = [
         checkInDate: { type: "string", description: "YYYY-MM-DD" },
         checkOutDate: { type: "string", description: "YYYY-MM-DD" },
         passengers: { type: "integer", minimum: 1 },
-        rooms: { type: "integer", minimum: 1 },
-        guests: { type: "integer", minimum: 1, description: "Total hotel guests (optional; defaults to passengers). Max 4 per room." }
+        rooms: { type: "integer", minimum: 1 }
       }
     }
   }
@@ -624,7 +622,8 @@ function handleToolCall(name, args) {
       checkInDate: args.checkInDate,
       checkOutDate: args.checkOutDate,
       rooms: args.rooms,
-      guests: args.guests ?? args.passengers
+      // create_itinerary does not accept a separate guests value; assume guests == passengers
+      guests: args.passengers
     });
     return {
       generatedAt: nowIso(),
