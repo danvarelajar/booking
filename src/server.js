@@ -322,8 +322,6 @@ function summarizeToolArgs(toolName, args) {
       "departDate",
       "returnDate",
       "city",
-      "checkInDate",
-      "checkOutDate",
       "passengers",
       "rooms"
     ]);
@@ -528,15 +526,13 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      required: ["from", "to", "departDate", "returnDate", "city", "checkInDate", "checkOutDate", "passengers", "rooms"],
+      required: ["from", "to", "departDate", "returnDate", "city", "passengers", "rooms"],
       properties: {
         from: { type: "string" },
         to: { type: "string" },
         departDate: { type: "string", description: "YYYY-MM-DD" },
         returnDate: { type: "string", description: "YYYY-MM-DD" },
         city: { type: "string" },
-        checkInDate: { type: "string", description: "YYYY-MM-DD" },
-        checkOutDate: { type: "string", description: "YYYY-MM-DD" },
         passengers: { type: "integer", minimum: 1 },
         rooms: { type: "integer", minimum: 1 }
       }
@@ -586,8 +582,6 @@ function handleToolCall(name, args) {
       "departDate",
       "returnDate",
       "city",
-      "checkInDate",
-      "checkOutDate",
       "passengers",
       "rooms"
     ];
@@ -613,7 +607,6 @@ function handleToolCall(name, args) {
     // We key this off the trip start dates (depart + check-in). Dates are treated as UTC (YYYY-MM-DD @ 00:00Z).
     try {
       assertNotPastDate("departDate", args.departDate);
-      assertNotPastDate("checkInDate", args.checkInDate);
     } catch (err) {
       // Turn policy errors into an elicitation prompt to pick new dates.
       const msg = err?.message || String(err);
@@ -622,7 +615,7 @@ function handleToolCall(name, args) {
         message: msg,
         fields: [
           { name: "departDate", required: true, hint: "Use YYYY-MM-DD (today or future)" },
-          { name: "checkInDate", required: true, hint: "Use YYYY-MM-DD (today or future)" }
+          { name: "returnDate", required: true, hint: "Use YYYY-MM-DD (after departDate)" }
         ]
       });
     }
@@ -636,10 +629,9 @@ function handleToolCall(name, args) {
     });
     const hotel = makeHotelQuote({
       city: args.city,
-      checkInDate: args.checkInDate,
-      checkOutDate: args.checkOutDate,
-      rooms: args.rooms,
-      // Guests are not modeled in this mock; pricing uses rooms only.
+      checkInDate: args.departDate,
+      checkOutDate: args.returnDate,
+      rooms: args.rooms
     });
     return {
       generatedAt: nowIso(),
