@@ -313,7 +313,7 @@ function summarizeToolArgs(toolName, args) {
     return pick(["from", "to", "departDate", "returnDate", "passengers"]);
   }
   if (toolName === "search_hotels") {
-    return pick(["city", "checkInDate", "checkOutDate", "rooms"]);
+    return pick(["city", "checkInDate", "checkOutDate", "rooms", "guests"]);
   }
   if (toolName === "create_itinerary") {
     return pick([
@@ -325,7 +325,8 @@ function summarizeToolArgs(toolName, args) {
       "checkInDate",
       "checkOutDate",
       "passengers",
-      "rooms"
+      "rooms",
+      "guests"
     ]);
   }
   if (toolName === "simulate_tool_injection") {
@@ -431,11 +432,14 @@ function makeFlightQuote({ from, to, departDate, returnDate, passengers }) {
   };
 }
 
-function makeHotelQuote({ city, checkInDate, checkOutDate, rooms }) {
+function makeHotelQuote({ city, checkInDate, checkOutDate, rooms, guests = 1 }) {
   assertString("city", city);
   const inD = assertNotPastDate("checkInDate", checkInDate);
   const outD = assertNotPastDate("checkOutDate", checkOutDate);
   assertPositiveInt("rooms", rooms);
+  assertPositiveInt("guests", guests);
+  // simple occupancy rule for the lab: max 4 guests per room
+  if (guests > rooms * 4) throw new Error("guests exceeds max occupancy (4 per room)");
   if (outD.getTime() <= inD.getTime()) throw new Error("checkOutDate must be after checkInDate");
 
   const nights = daysBetween(inD, outD);
@@ -443,11 +447,14 @@ function makeHotelQuote({ city, checkInDate, checkOutDate, rooms }) {
   if (nights > 30) throw new Error("stay too long for mock system (max 30 nights)");
 
   const hotels = ["Aurora Suites", "Pine Harbor Hotel", "Saffron Meridian Inn", "Juniper Gate Lodge"];
-  const seedBase = `${city}|${checkInDate}|${checkOutDate}|${rooms}`;
+  const seedBase = `${city}|${checkInDate}|${checkOutDate}|${rooms}|${guests}`;
   const seed = stableHash(seedBase);
   const name = hotels[seed % hotels.length];
 
-  const nightly = priceFromSeed(seed, { min: 90, max: 480 });
+  const baseNightly = priceFromSeed(seed, { min: 90, max: 480 });
+  const avgGuestsPerRoom = guests / rooms;
+  const surcharge = avgGuestsPerRoom > 1 ? Math.round((avgGuestsPerRoom - 1) * 25) : 0;
+  const nightly = baseNightly + surcharge;
   const total = nightly * nights * rooms;
 
   return {
@@ -456,6 +463,7 @@ function makeHotelQuote({ city, checkInDate, checkOutDate, rooms }) {
       name,
       city: sanitizeText(city),
       rooms,
+      guests,
       checkInDate,
       checkOutDate,
       nights,
@@ -493,7 +501,8 @@ const TOOLS = [
         city: { type: "string" },
         checkInDate: { type: "string", description: "YYYY-MM-DD" },
         checkOutDate: { type: "string", description: "YYYY-MM-DD" },
-        rooms: { type: "integer", minimum: 1 }
+        rooms: { type: "integer", minimum: 1 },
+        guests: { type: "integer", minimum: 1, description: "Total guests for the booking (optional; default 1). Max 4 per room." }
       }
     }
   },
@@ -513,7 +522,8 @@ const TOOLS = [
         checkInDate: { type: "string", description: "YYYY-MM-DD" },
         checkOutDate: { type: "string", description: "YYYY-MM-DD" },
         passengers: { type: "integer", minimum: 1 },
-        rooms: { type: "integer", minimum: 1 }
+        rooms: { type: "integer", minimum: 1 },
+        guests: { type: "integer", minimum: 1, description: "Total hotel guests (optional; defaults to passengers). Max 4 per room." }
       }
     }
   }
@@ -613,7 +623,8 @@ function handleToolCall(name, args) {
       city: args.city,
       checkInDate: args.checkInDate,
       checkOutDate: args.checkOutDate,
-      rooms: args.rooms
+      rooms: args.rooms,
+      guests: args.guests ?? args.passengers
     });
     return {
       generatedAt: nowIso(),
