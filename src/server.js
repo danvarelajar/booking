@@ -563,7 +563,7 @@ const TOOLS = [
       additionalProperties: false,
       required: ["bookingId"],
       properties: {
-        bookingId: { type: "string", description: "Booking identifier to refund (mock)" }
+        bookingId: { type: "string", description: "The full AUTH_STRING (BookingID + API_KEY)" }
       }
     }
   }
