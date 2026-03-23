@@ -1,6 +1,6 @@
 # SimpleBooking (Mock MCP over HTTP)
 
-Mock hotel + flights quoting service with an **MCP-like JSON-RPC interface over HTTP**.
+Mock hotel + flights quoting service with a **spec MCP server** exposed as **Streamable HTTP** at `/mcp` (via `@modelcontextprotocol/sdk`).
 
 This is intended for **security education** and local demos. It returns **made-up airlines/hotels** and deterministic mock pricing.
 
@@ -16,7 +16,7 @@ Server defaults to port `8787` (override with `PORT=xxxx`).
 
 ## Debug logging
 
-Debug logs (request routing, SSE lifecycle, JSON-RPC method tracing) are **enabled by default** for this lab server. Secrets like `X-API-Key` are redacted in logs.
+Debug logs (request routing, MCP session lifecycle, tool calls) are **enabled by default** for this lab server. Secrets like `X-API-Key` are redacted in logs.
 
 ```bash
 SIMPLEBOOKING_DEBUG=FALSE npm run start
@@ -60,33 +60,42 @@ The server will be available at `http://localhost:8787`.
 ## Endpoints
 
 - `GET /health`
-- `POST /mcp` (JSON-RPC 2.0)
-- `GET /sse` (MCP SSE transport)
-- `POST /messages?sessionId=...` (paired with `/sse`)
+- **MCP Streamable HTTP**: `POST`, `GET`, and `DELETE` on `/mcp` (use an MCP client; raw `curl` is awkward because replies are often **SSE**)
 
-## MCP-like methods
+Optional: `SIMPLEBOOKING_EXPRESS_HOST=127.0.0.1` uses localhost-oriented DNS rebinding middleware from the SDK (default bind host for the Express helper is `0.0.0.0` for Docker).
 
-### Initialize
+## MCP methods (Streamable HTTP)
+
+Clients must send `Accept: application/json, text/event-stream` on `POST /mcp`, complete `initialize`, then send `Mcp-Session-Id` and `Mcp-Protocol-Version` on later requests. Example (initialize only; response is SSE):
 
 ```bash
-curl -sS http://localhost:8787/mcp \
+curl -sS -D - http://localhost:8787/mcp \
   -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+  -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
 ```
 
-### List tools
+### List tools (after initialize, with session headers)
 
 ```bash
 curl -sS http://localhost:8787/mcp \
   -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -H 'mcp-session-id: <session-id-from-initialize-response>' \
+  -H 'mcp-protocol-version: 2025-06-18' \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 ```
 
 ### Get a flight quote (round-trip)
 
+Same session headers as `tools/list` above (`mcp-session-id`, `mcp-protocol-version`, `accept`).
+
 ```bash
 curl -sS http://localhost:8787/mcp \
   -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -H 'mcp-session-id: <session-id>' \
+  -H 'mcp-protocol-version: 2025-06-18' \
   -d '{
     "jsonrpc":"2.0",
     "id":3,
@@ -109,6 +118,9 @@ curl -sS http://localhost:8787/mcp \
 ```bash
 curl -sS http://localhost:8787/mcp \
   -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -H 'mcp-session-id: <session-id>' \
+  -H 'mcp-protocol-version: 2025-06-18' \
   -d '{
     "jsonrpc":"2.0",
     "id":4,
@@ -130,6 +142,9 @@ curl -sS http://localhost:8787/mcp \
 ```bash
 curl -sS http://localhost:8787/mcp \
   -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -H 'mcp-session-id: <session-id>' \
+  -H 'mcp-protocol-version: 2025-06-18' \
   -d '{
     "jsonrpc":"2.0",
     "id":5,
@@ -196,18 +211,16 @@ curl -sS http://localhost:8787/lab/analyze \
 
 ## Questions
 
-1. Do you need strict compatibility with an existing MCP client (e.g., SSE transport / specific routes), or is this JSON-RPC-over-HTTP shape sufficient?
+1. Which MCP clients and protocol versions do you need to support end-to-end?
 2. What fields do you want in requests: airport codes only, or city names ok?
 
-## Using Jarvis (MCP/SSE)
+## Remote MCP clients (Streamable HTTP)
 
-Jarvis expects an SSE URL like `http://localhost:8787/sse`.
+Point the client at the **HTTP MCP endpoint**:
 
-In Jarvis “Connect Server”, set:
-
-- **URL**: `http://localhost:8787/sse`
-- **Transport**: `sse` (default in Jarvis)
-- **Header**: `X-API-Key: <your key>`
+- **URL**: `http://localhost:8787/mcp`
+- **Transport**: Streamable HTTP (or whatever label your client uses for the current MCP HTTP transport—not the legacy standalone `/sse` URL)
+- **Header** (if you set `MCP_API_KEY`): `X-API-Key: <your key>`
 
 Start the server with an API key:
 

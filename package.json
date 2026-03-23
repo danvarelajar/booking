@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Mock hotel + flights quoting app with an MCP-like HTTP JSON-RPC interface (educational).",
+  "description": "Mock hotel + flights quoting app with MCP Streamable HTTP at /mcp (@modelcontextprotocol/sdk).",
   "scripts": {
     "start": "node src/server.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "express": "^5.2.1",
+    "zod": "^4.3.6"
   }
 }
-
-
