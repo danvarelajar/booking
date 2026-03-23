@@ -43,9 +43,14 @@ export function assertNotPastDate(name, s) {
   return d;
 }
 
-export function makeElicitationForm({ title, message, fields }) {
-  const schema = {
+/**
+ * Structured elicitation payload (validated by MCP outputSchema as JSON Schema).
+ */
+export function makeElicitationPayload({ title, message, fields }) {
+  return {
+    variant: "elicitation",
     title: title || "Additional information required",
+    message: message || "More information is required.",
     requestedSchema: {
       type: "object",
       properties: Object.fromEntries(
@@ -59,14 +64,6 @@ export function makeElicitationForm({ title, message, fields }) {
       ),
       required: (fields || []).filter((f) => f.required).map((f) => f.name)
     }
-  };
-
-  return {
-    content: [
-      { type: "text", text: message || "More information is required." },
-      { type: "text", text: `Elicitation (schema):\n${JSON.stringify(schema, null, 2)}` }
-    ],
-    isError: false
   };
 }
 
@@ -248,15 +245,6 @@ function makeHotelQuote({ city, checkInDate, checkOutDate, rooms }) {
   };
 }
 
-export function isToolResultShape(v) {
-  return (
-    v &&
-    typeof v === "object" &&
-    Array.isArray(v.content) &&
-    (typeof v.isError === "boolean" || v.isError === undefined)
-  );
-}
-
 /**
  * @param {string} name
  * @param {Record<string, unknown>} args
@@ -270,7 +258,7 @@ export function handleToolCall(name, args) {
       (k) => args?.[k] === undefined || args?.[k] === null || String(args?.[k]).trim?.() === ""
     );
     if (missing.length > 0) {
-      return makeElicitationForm({
+      return makeElicitationPayload({
         title: "Create itinerary: missing fields",
         message: `To create an itinerary, I still need: ${missing.join(", ")}.`,
         fields: missing.map((fieldName) => ({
@@ -290,7 +278,7 @@ export function handleToolCall(name, args) {
       assertNotPastDate("departDate", args.departDate);
     } catch (err) {
       const msg = err?.message || String(err);
-      return makeElicitationForm({
+      return makeElicitationPayload({
         title: "Create itinerary: update dates",
         message: msg,
         fields: [
@@ -314,6 +302,7 @@ export function handleToolCall(name, args) {
       rooms: args.rooms
     });
     return {
+      variant: "itinerary",
       generatedAt: nowIso(),
       currency: "USD",
       flight,
