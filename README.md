@@ -66,13 +66,17 @@ Optional: `SIMPLEBOOKING_EXPRESS_HOST=127.0.0.1` uses localhost-oriented DNS reb
 
 ## MCP methods (Streamable HTTP)
 
+### Protocol version vs tool schemas
+
+The examples below use MCP protocol revision **`2025-11-25`** (`initialize.params.protocolVersion` and the `mcp-protocol-version` header). That date identifies the **protocol** spec, not a JSON Schema release. Tool `inputSchema` / `outputSchema` in `tools/list` are **JSON Schema** objects generated from Zod by `@modelcontextprotocol/sdk`; validate or interpret them with a normal JSON Schema toolchain (see [JSON Schema usage](https://modelcontextprotocol.io/specification/2025-11-25/basic#json-schema-usage) in the MCP docs).
+
 Clients must send `Accept: application/json, text/event-stream` on `POST /mcp`, complete `initialize`, then send `Mcp-Session-Id` and `Mcp-Protocol-Version` on later requests. Example (initialize only; response is SSE):
 
 ```bash
 curl -sS -D - http://localhost:8787/mcp \
   -H 'content-type: application/json' \
   -H 'accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
 ```
 
 ### List tools (after initialize, with session headers)
@@ -82,7 +86,7 @@ curl -sS http://localhost:8787/mcp \
   -H 'content-type: application/json' \
   -H 'accept: application/json, text/event-stream' \
   -H 'mcp-session-id: <session-id-from-initialize-response>' \
-  -H 'mcp-protocol-version: 2025-06-18' \
+  -H 'mcp-protocol-version: 2025-11-25' \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 ```
 
@@ -95,7 +99,7 @@ curl -sS http://localhost:8787/mcp \
   -H 'content-type: application/json' \
   -H 'accept: application/json, text/event-stream' \
   -H 'mcp-session-id: <session-id>' \
-  -H 'mcp-protocol-version: 2025-06-18' \
+  -H 'mcp-protocol-version: 2025-11-25' \
   -d '{
     "jsonrpc":"2.0",
     "id":3,
@@ -120,7 +124,7 @@ curl -sS http://localhost:8787/mcp \
   -H 'content-type: application/json' \
   -H 'accept: application/json, text/event-stream' \
   -H 'mcp-session-id: <session-id>' \
-  -H 'mcp-protocol-version: 2025-06-18' \
+  -H 'mcp-protocol-version: 2025-11-25' \
   -d '{
     "jsonrpc":"2.0",
     "id":4,
@@ -144,7 +148,7 @@ curl -sS http://localhost:8787/mcp \
   -H 'content-type: application/json' \
   -H 'accept: application/json, text/event-stream' \
   -H 'mcp-session-id: <session-id>' \
-  -H 'mcp-protocol-version: 2025-06-18' \
+  -H 'mcp-protocol-version: 2025-11-25' \
   -d '{
     "jsonrpc":"2.0",
     "id":5,
@@ -211,7 +215,7 @@ curl -sS http://localhost:8787/lab/analyze \
 
 ## Questions
 
-1. Which MCP clients and protocol versions do you need to support end-to-end?
+1. Which MCP clients and protocol versions do you need to support end-to-end? (Examples here target **`2025-11-25`**; use an older `protocolVersion` only if your client requires it.)
 2. What fields do you want in requests: airport codes only, or city names ok?
 
 ## Remote MCP clients (Streamable HTTP)
