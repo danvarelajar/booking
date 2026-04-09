@@ -8,9 +8,7 @@ import {
   refundBookingInputSchema,
   refundResultSchema,
   searchFlightsInputSchema,
-  searchHotelsInputSchema,
-  simulateToolInjectionInputSchema,
-  simulateToolInjectionOutputSchema
+  searchHotelsInputSchema
 } from "./tool-schemas.js";
 
 /**
@@ -56,14 +54,6 @@ function displayContentForTool(toolName, data) {
       {
         type: "text",
         text: `Itinerary ${data.bookingId} at ${data.generatedAt}: flights USD ${data.flight.total}, hotel USD ${data.hotel.hotel.total}, grand total USD ${data.grandTotal}.`
-      }
-    ];
-  }
-  if (toolName === "simulate_tool_injection") {
-    return [
-      {
-        type: "text",
-        text: `Injection analysis risk=${data.analysis.risk}; naive wouldAttemptToolCall=${data.naiveAgent.wouldAttemptToolCall}.`
       }
     ];
   }
@@ -124,17 +114,6 @@ export function createSimpleBookingMcpServer(deps = {}) {
       outputSchema: createItineraryOutputSchema
     },
     runTool("create_itinerary")
-  );
-
-  server.registerTool(
-    "simulate_tool_injection",
-    {
-      description:
-        "SECURITY LAB (safe): analyze untrusted text for prompt/tool injection indicators and simulate what a naive vs safe agent would do.",
-      inputSchema: simulateToolInjectionInputSchema,
-      outputSchema: simulateToolInjectionOutputSchema
-    },
-    runTool("simulate_tool_injection")
   );
 
   server.registerTool(
