@@ -87,6 +87,11 @@ function priceFromSeed(seed, { min, max }) {
   return Math.round(min + normalized * span);
 }
 
+function makeBookingId(prefix, seedBase) {
+  const value = stableHash(`${prefix}|${seedBase}`).toString(36).toUpperCase().padStart(8, "0");
+  return `bk_${value}`;
+}
+
 export function sanitizeText(s) {
   return String(s).replace(/[\u0000-\u001F\u007F]/g, "").trim();
 }
@@ -203,6 +208,7 @@ function makeFlightQuote({ from, to, departDate, returnDate, passengers }) {
   };
 
   return {
+    bookingId: makeBookingId("flight", seedBase),
     currency: "USD",
     passengers,
     outbound,
@@ -231,6 +237,7 @@ function makeHotelQuote({ city, checkInDate, checkOutDate, rooms }) {
   const total = nightly * nights * rooms;
 
   return {
+    bookingId: makeBookingId("hotel", seedBase),
     currency: "USD",
     hotel: {
       name,
@@ -303,6 +310,10 @@ export function handleToolCall(name, args) {
     });
     return {
       variant: "itinerary",
+      bookingId: makeBookingId(
+        "itinerary",
+        `${args.from}|${args.to}|${args.departDate}|${args.returnDate}|${args.city}|${args.passengers}|${args.rooms}`
+      ),
       generatedAt: nowIso(),
       currency: "USD",
       flight,

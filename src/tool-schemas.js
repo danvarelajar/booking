@@ -19,6 +19,7 @@ export const flightLegSchema = z
 
 export const flightQuoteSchema = z
   .object({
+    bookingId: z.string(),
     currency: z.literal("USD"),
     passengers: z.number().int().min(1),
     outbound: flightLegSchema,
@@ -42,6 +43,7 @@ export const hotelDetailSchema = z
 
 export const hotelQuoteSchema = z
   .object({
+    bookingId: z.string(),
     currency: z.literal("USD"),
     hotel: hotelDetailSchema
   })
@@ -64,6 +66,7 @@ export const elicitationRequestedSchema = z
 export const createItineraryOutputSchema = z
   .object({
     variant: z.enum(["elicitation", "itinerary"]),
+    bookingId: z.string().optional(),
     title: z.string().optional(),
     message: z.string().optional(),
     requestedSchema: elicitationRequestedSchema.optional(),
@@ -78,6 +81,7 @@ export const createItineraryOutputSchema = z
     const bad = (message) => ctx.addIssue({ code: "custom", message });
 
     if (data.variant === "elicitation") {
+      if (data.bookingId != null) bad("elicitation must not include bookingId");
       if (data.title == null) bad("elicitation requires title");
       if (data.message == null) bad("elicitation requires message");
       if (data.requestedSchema == null) bad("elicitation requires requestedSchema");
@@ -87,6 +91,7 @@ export const createItineraryOutputSchema = z
       if (data.hotel != null) bad("elicitation must not include hotel");
       if (data.grandTotal != null) bad("elicitation must not include grandTotal");
     } else {
+      if (data.bookingId == null) bad("itinerary requires bookingId");
       if (data.generatedAt == null) bad("itinerary requires generatedAt");
       if (data.currency !== "USD") bad("itinerary requires currency USD");
       if (data.flight == null) bad("itinerary requires flight");

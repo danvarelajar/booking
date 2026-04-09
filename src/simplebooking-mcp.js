@@ -38,7 +38,7 @@ function displayContentForTool(toolName, data) {
     return [
       {
         type: "text",
-        text: `Round-trip ${data.outbound.from}–${data.outbound.to} / ${data.inbound.from}–${data.inbound.to}: USD ${data.total} total (${data.passengers} passengers).`
+        text: `Round-trip ${data.outbound.from}–${data.outbound.to} / ${data.inbound.from}–${data.inbound.to}: USD ${data.total} total (${data.passengers} passengers), bookingId=${data.bookingId}.`
       }
     ];
   }
@@ -47,7 +47,7 @@ function displayContentForTool(toolName, data) {
     return [
       {
         type: "text",
-        text: `${h.name} in ${h.city}: ${h.nights} night(s), ${h.rooms} room(s), USD ${h.total} total.`
+        text: `${h.name} in ${h.city}: ${h.nights} night(s), ${h.rooms} room(s), USD ${h.total} total, bookingId=${data.bookingId}.`
       }
     ];
   }
@@ -55,7 +55,7 @@ function displayContentForTool(toolName, data) {
     return [
       {
         type: "text",
-        text: `Itinerary at ${data.generatedAt}: flights USD ${data.flight.total}, hotel USD ${data.hotel.hotel.total}, grand total USD ${data.grandTotal}.`
+        text: `Itinerary ${data.bookingId} at ${data.generatedAt}: flights USD ${data.flight.total}, hotel USD ${data.hotel.hotel.total}, grand total USD ${data.grandTotal}.`
       }
     ];
   }
