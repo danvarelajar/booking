@@ -181,6 +181,38 @@ app.use((req, res, next) => {
   next();
 });
 
+function attachResponseHeaderDebug(req, res) {
+  if (!DEBUG || !DEBUG_LOG_HEADERS) return;
+  const requestId = req.requestId;
+  const startedAt = Date.now();
+
+  const originalWriteHead = res.writeHead.bind(res);
+  res.writeHead = function patchedWriteHead(statusCode, statusMessage, headers) {
+    const elapsedMs = Date.now() - startedAt;
+    let resolvedHeaders = headers;
+    let resolvedStatusMessage = statusMessage;
+
+    if (typeof statusMessage === "object" && statusMessage !== null) {
+      resolvedHeaders = statusMessage;
+      resolvedStatusMessage = undefined;
+    }
+
+    debugLog({
+      event: "http_response_write_head",
+      requestId,
+      path: req.path,
+      method: req.method,
+      elapsedMs,
+      statusCode,
+      statusMessage: resolvedStatusMessage,
+      explicitHeaders: redactHeaders(resolvedHeaders),
+      effectiveHeaders: redactHeaders(res.getHeaders())
+    });
+
+    return originalWriteHead(statusCode, statusMessage, headers);
+  };
+}
+
 app.get("/health", (req, res) => {
   json(res, 200, { ok: true, time: nowIso() });
 });
@@ -211,6 +243,7 @@ const mcpPostHandler = async (req, res) => {
   const requestId = req.requestId;
   const sessionId = req.headers["mcp-session-id"];
   try {
+    attachResponseHeaderDebug(req, res);
     await mcpRequestContext.run({ requestId }, async () => {
       let transport;
       if (sessionId && transports[sessionId]) {
@@ -279,6 +312,7 @@ const mcpPostHandler = async (req, res) => {
 const mcpGetHandler = async (req, res) => {
   const requestId = req.requestId;
   const sessionId = req.headers["mcp-session-id"];
+  attachResponseHeaderDebug(req, res);
   if (!sessionId || !transports[sessionId]) {
     return res.status(400).send("Invalid or missing session ID");
   }
@@ -295,6 +329,7 @@ const mcpGetHandler = async (req, res) => {
 const mcpDeleteHandler = async (req, res) => {
   const requestId = req.requestId;
   const sessionId = req.headers["mcp-session-id"];
+  attachResponseHeaderDebug(req, res);
   if (!sessionId || !transports[sessionId]) {
     return res.status(400).send("Invalid or missing session ID");
   }
