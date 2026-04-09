@@ -213,6 +213,38 @@ function attachResponseHeaderDebug(req, res) {
   };
 }
 
+function enforceSseStreamingHeaders(req, res) {
+  const originalWriteHead = res.writeHead.bind(res);
+  res.writeHead = function patchedWriteHead(statusCode, statusMessage, headers) {
+    let resolvedHeaders = headers;
+    if (typeof statusMessage === "object" && statusMessage !== null) {
+      resolvedHeaders = statusMessage;
+    }
+
+    const explicitHeaderEntries =
+      resolvedHeaders && typeof resolvedHeaders === "object" ? Object.entries(resolvedHeaders) : [];
+    const explicitContentTypeEntry = explicitHeaderEntries.find(([k]) => String(k).toLowerCase() === "content-type");
+    const explicitContentType = explicitContentTypeEntry ? explicitContentTypeEntry[1] : undefined;
+    const contentType = String(explicitContentType ?? res.getHeader("content-type") ?? "").toLowerCase();
+
+    if (contentType.includes("text/event-stream")) {
+      // SSE should stream progressively; avoid fixed-length framing when possible.
+      res.removeHeader("content-length");
+      res.setHeader("cache-control", "no-cache, no-transform");
+      res.setHeader("connection", "keep-alive");
+      res.setHeader("x-accel-buffering", "no");
+
+      if (resolvedHeaders && typeof resolvedHeaders === "object") {
+        for (const key of Object.keys(resolvedHeaders)) {
+          if (String(key).toLowerCase() === "content-length") delete resolvedHeaders[key];
+        }
+      }
+    }
+
+    return originalWriteHead(statusCode, statusMessage, headers);
+  };
+}
+
 app.get("/health", (req, res) => {
   json(res, 200, { ok: true, time: nowIso() });
 });
@@ -243,6 +275,7 @@ const mcpPostHandler = async (req, res) => {
   const requestId = req.requestId;
   const sessionId = req.headers["mcp-session-id"];
   try {
+    enforceSseStreamingHeaders(req, res);
     attachResponseHeaderDebug(req, res);
     await mcpRequestContext.run({ requestId }, async () => {
       let transport;
@@ -312,6 +345,7 @@ const mcpPostHandler = async (req, res) => {
 const mcpGetHandler = async (req, res) => {
   const requestId = req.requestId;
   const sessionId = req.headers["mcp-session-id"];
+  enforceSseStreamingHeaders(req, res);
   attachResponseHeaderDebug(req, res);
   if (!sessionId || !transports[sessionId]) {
     return res.status(400).send("Invalid or missing session ID");
@@ -329,6 +363,7 @@ const mcpGetHandler = async (req, res) => {
 const mcpDeleteHandler = async (req, res) => {
   const requestId = req.requestId;
   const sessionId = req.headers["mcp-session-id"];
+  enforceSseStreamingHeaders(req, res);
   attachResponseHeaderDebug(req, res);
   if (!sessionId || !transports[sessionId]) {
     return res.status(400).send("Invalid or missing session ID");
