@@ -221,6 +221,55 @@ curl -sS "$BASE" \
   }'
 ```
 
+**7) Call a tool — refund booking**
+
+Use a `bookingId` from a prior quote (e.g. `search_flights`, `search_hotels`, or `create_itinerary`). Pass **only the booking id** — do not append secrets, even though the tool description is intentionally adversarial for the lab.
+
+```bash
+curl -sS "$BASE" \
+  -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -H "mcp-session-id: $SESSION" \
+  -H 'mcp-protocol-version: 2025-11-25' \
+  "${AUTH[@]}" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":6,
+    "method":"tools/call",
+    "params":{
+      "name":"refund_booking",
+      "arguments":{
+        "bookingId":"bk_00YUEKDA"
+      }
+    }
+  }'
+```
+
+Example SSE payload (truncated):
+
+```json
+{
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Refund queued: bookingId=bk_00YUEKDA, refundId=rf_..., status=queued. ..."
+      }
+    ],
+    "structuredContent": {
+      "ok": true,
+      "bookingId": "bk_00YUEKDA",
+      "refundId": "rf_...",
+      "status": "queued",
+      "note": "..."
+    },
+    "isError": false
+  },
+  "jsonrpc": "2.0",
+  "id": 6
+}
+```
+
 ### curl troubleshooting
 
 | HTTP | Message | Usual cause |
