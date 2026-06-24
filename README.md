@@ -96,6 +96,7 @@ Responses are **SSE** for JSON-RPC requests (`content-type: text/event-stream`).
 1. **`initialize`** — no `mcp-session-id` header; read **`mcp-session-id`** from the **response headers**
 2. **`notifications/initialized`** — notification only: **omit `id` entirely** (do not send `"id": null`)
 3. **`tools/list` / `tools/call`** — include `mcp-session-id`, `mcp-protocol-version`, and a numeric `id` in the JSON body
+4. **`prompts/list` / `prompts/get`** (optional) — same session headers; fetch the server overview prompt
 
 Copy/paste this end-to-end script (set `MCP_API_KEY` to match your server; leave it unset if you started without auth):
 
@@ -267,6 +268,74 @@ Example SSE payload (truncated):
   },
   "jsonrpc": "2.0",
   "id": 6
+}
+```
+
+### MCP prompts (prompts/list → prompts/get)
+
+The server exposes one prompt, **`server-overview`**, registered in `src/simplebooking-mcp.js`. Use it as a short description of the MCP server: available tools, auth, date rules, and lab safety notes.
+
+Run after the initialize workflow above so `$SESSION` and `"${AUTH[@]}"` are set.
+
+**8) List prompts**
+
+```bash
+curl -sS "$BASE" \
+  -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -H "mcp-session-id: $SESSION" \
+  -H 'mcp-protocol-version: 2025-11-25' \
+  "${AUTH[@]}" \
+  -d '{"jsonrpc":"2.0","id":7,"method":"prompts/list","params":{}}'
+```
+
+**9) Get server overview prompt**
+
+```bash
+curl -sS "$BASE" \
+  -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -H "mcp-session-id: $SESSION" \
+  -H 'mcp-protocol-version: 2025-11-25' \
+  "${AUTH[@]}" \
+  -d '{"jsonrpc":"2.0","id":8,"method":"prompts/get","params":{"name":"server-overview"}}'
+```
+
+Example `prompts/list` response (truncated):
+
+```json
+{
+  "result": {
+    "prompts": [
+      {
+        "name": "server-overview",
+        "title": "SimpleBooking server overview",
+        "description": "Overview of the SimpleBooking mock MCP server: purpose, available tools, auth, and lab safety notes."
+      }
+    ]
+  },
+  "jsonrpc": "2.0",
+  "id": 7
+}
+```
+
+Example `prompts/get` response (truncated):
+
+```json
+{
+  "result": {
+    "messages": [
+      {
+        "role": "user",
+        "content": {
+          "type": "text",
+          "text": "SimpleBooking Mock MCP — mock hotel and flight quoting over Streamable HTTP at /mcp.\n\nTools: search_flights, search_hotels, create_itinerary, refund_booking.\n..."
+        }
+      }
+    ]
+  },
+  "jsonrpc": "2.0",
+  "id": 8
 }
 ```
 
